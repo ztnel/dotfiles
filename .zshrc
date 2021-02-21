@@ -7,6 +7,7 @@ setopt nonomatch
 export PATH=$PATH:/usr/local/Cellar/python@3.8/3.8.6/Frameworks/Python.framework/Versions/3.8/bin
 # custom aliases
 alias python=python3
+alias code=/usr/local/bin/code-insiders
 alias acli=/usr/local/bin/arduino-cli
 alias h=history
 alias pd=pushd
