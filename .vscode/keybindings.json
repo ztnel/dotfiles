@@ -1,0 +1,10 @@
+// 既定値を上書きするには、このファイル内にキー バインドを挿入します
+[
+    { "key": "cmd+k", "command": "workbench.action.terminal.focus"},
+    { "key": "cmd+k", "command": "workbench.action.focusActiveEditorGroup", "when": "terminalFocus"},
+    // TMUXのよう
+    { "key": "cmd+right", "command": "workbench.action.navigateRight" },
+    { "key": "cmd+left", "command": "workbench.action.navigateLeft" },
+    { "key": "cmd+up", "command": "workbench.action.navigateUp" },
+    { "key": "cmd+down", "command": "workbench.action.navigateDown" }
+]
