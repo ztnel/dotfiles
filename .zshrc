@@ -8,7 +8,6 @@ export PYENV_BASE_PATH=/Users/"$USER"/.pyenv
 # custom aliases
 alias python3.8=/opt/homebrew/opt/python@3.8/bin/python3
 alias python=python3
-alias code=/usr/local/bin/code-insiders
 alias acli=/opt/homebrew/bin/arduino-cli
 alias h=history
 alias pd=pushd
@@ -41,4 +40,5 @@ function parse_git_branch {
     git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/(\1)/'
 }
 
-PS1="%F{red}%n%f%F{green}  %F{blue}%*%F%F{yellow} %3~ %F{15}> "
+PS1='%F{red}%n%f%F{green} '$'\Uf8ff'' %F{blue}%*%F%F{yellow} %3~ %F{15}> '
+
