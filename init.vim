@@ -1,6 +1,5 @@
 call plug#begin()
 Plug 'duane9/nvim-rg'
-Plug 'rebelot/kanagawa.nvim'
 Plug 'nvim-lualine/lualine.nvim'
 Plug 'nvim-tree/nvim-web-devicons'
 Plug 'nvim-lua/plenary.nvim'
@@ -25,6 +24,10 @@ call plug#end()
 
 " Find files using Telescope command-line sugar.
 nnoremap <C-p> <cmd>Telescope find_files<cr>
+" Pop up menu navigation remap
+inoremap <silent><expr> <TAB> pumvisible() ? "\<C-n>" : "\<TAB>"
+inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
+
 
 " Configure LSP for C
 au FileType c nnoremap <buffer> K :lua vim.lsp.buf.hover()<CR>
@@ -45,7 +48,7 @@ set softtabstop=4           " see multiple spaces as tabstops so <BS> does the r
 set expandtab               " converts tabs to white space
 set number                  " add line numbers
 set wildmode=longest,list   " get bash-like tab completions
-filetype plugin indent on   "allow auto-indenting depending on file type
+filetype plugin indent on   " allow auto-indenting depending on file type
 syntax on                   " syntax highlighting
 set mouse=a                 " enable mouse click
 set clipboard=unnamedplus   " using system clipboard
@@ -59,8 +62,8 @@ let g:gitgutter_enabled = 1
 let g:webdevicons_enable = 1
 
 lua << EOF
-  vim.keymap.set("n", "gd", function() vim.lsp.buf.definition() end, opts)
-  vim.keymap.set("n", "gD", function() vim.lsp.buf.declaration() end, opts)
+  vim.keymap.set("n", "gd", function() vim.lsp.buf.definition() end, {})
+  vim.keymap.set("n", "gD", function() vim.lsp.buf.declaration() end, {})
   local ft = require('guard.filetype')
   ft('c'):fmt('clang-format')
   require('guard').setup({
@@ -71,7 +74,7 @@ lua << EOF
   })
   require('gitsigns').setup()
   -- Set up nvim-cmp.
-  local cmp = require'cmp'
+  local cmp = require('cmp')
   cmp.setup({
     snippet = {
       -- REQUIRED - you must specify a snippet engine
@@ -80,20 +83,23 @@ lua << EOF
       end,
     },
     window = {
-      -- completion = cmp.config.window.bordered(),
-      -- documentation = cmp.config.window.bordered(),
+      completion = cmp.config.window.bordered(),
+      documentation = cmp.config.window.bordered(),
     },
     mapping = cmp.mapping.preset.insert({
+      ['<Tab>'] = cmp.mapping.select_next_item(),
+      ['<S-Tab>'] = cmp.mapping.select_prev_item(),
       ['<C-b>'] = cmp.mapping.scroll_docs(-4),
       ['<C-f>'] = cmp.mapping.scroll_docs(4),
       ['<C-Space>'] = cmp.mapping.complete(),
       ['<C-e>'] = cmp.mapping.abort(),
-      ['<CR>'] = cmp.mapping.confirm({ select = true }), -- Accept currently selected item. Set `select` to `false` to only confirm explicitly selected items.
+      ['<CR>'] = cmp.mapping.confirm({ select = true }),
     }),
     sources = cmp.config.sources({
       { name = 'nvim_lsp' },
-      { name = 'vsnip' }, -- For vsnip users.
-    }, {
+      { name = 'vsnip' },
+    },
+    {
       { name = 'buffer' },
     })
   })
@@ -137,7 +143,7 @@ lua << EOF
         -- Include paths, replace with the paths relevant to your system
         compileCommands = { 'compile_commands.json' },
         systemIncludePaths = {
-          '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include',
+          '/usr/include',
         },
       },
     },
@@ -148,30 +154,6 @@ lua << EOF
       enable = true
     }
   }
-  require('kanagawa').setup({
-    compile = false,             -- enable compiling the colorscheme
-    undercurl = true,            -- enable undercurls
-    commentStyle = { italic = true },
-    functionStyle = {},
-    keywordStyle = { italic = true},
-    statementStyle = { bold = true },
-    typeStyle = {},
-    transparent = false,         -- do not set background color
-    dimInactive = false,         -- dim inactive window `:h hl-NormalNC`
-    terminalColors = true,       -- define vim.g.terminal_color_{0,17}
-    colors = {                   -- add/modify theme and palette colors
-        palette = {},
-        theme = { wave = {}, lotus = {}, dragon = {}, all = {} },
-    },
-    overrides = function(colors) -- add/modify highlights
-        return {}
-    end,
-    theme = "wave",              -- Load "wave" theme when 'background' option is not set
-    background = {               -- map the value of 'background' option to a theme
-        dark = "wave",           -- try "dragon" !
-        light = "lotus"
-    },
-  })
   require('lualine').setup({
     options = {
         theme = 'vscode',
