@@ -1,9 +1,9 @@
-vim.api.nvim_set_option('showmatch', true)
-vim.api.nvim_set_option('ignorecase', true)
-vim.api.nvim_set_option('ignorecase', true)
-vim.api.nvim_set_option('number', true)
-vim.api.nvim_set_option('syntax', 'on')
-vim.api.nvim_set_option('clipboard', 'unnamedplus')
-vim.api.nvim_set_option('cursorline', true)
-vim.api.nvim_set_option('ttyfast', true)
+vim.opt.number = true
+vim.opt.cursorline = true
+vim.opt.showmatch = true
+vim.opt.ttyfast = true
+vim.opt.ignorecase = true
+vim.opt.clipboard = 'unnamedplus'
+vim.opt.relativenumber = true
+vim.opt.wrap = false
 vim.cmd('colorscheme vscode')
