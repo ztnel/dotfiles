@@ -19,5 +19,7 @@ Plug('Mofiqul/vscode.nvim')
 Plug('lewis6991/gitsigns.nvim')
 Plug('nvimdev/guard.nvim')
 Plug('nvimdev/guard-collection')
+Plug('p00f/nvim-ts-rainbow')
+Plug('jiangmiao/auto-pairs')
 vim.call('plug#end')
 
