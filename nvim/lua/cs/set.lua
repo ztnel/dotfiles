@@ -7,4 +7,6 @@ vim.opt.expandtab = true
 vim.opt.ttyfast = true
 vim.opt.wildignore = {'*/cache/*', '*/tmp/*'}
 vim.opt.modeline = false
+vim.opt.clipboard = 'unnamedplus'
+vim.opt.wrap = false
 vim.cmd('colorscheme vscode')
