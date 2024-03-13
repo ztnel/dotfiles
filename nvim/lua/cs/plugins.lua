@@ -1,6 +1,5 @@
 local vim = vim
 local Plug = vim.fn['plug#']
-
 vim.call('plug#begin')
 Plug('duane9/nvim-rg')
 Plug('nvim-lualine/lualine.nvim')
@@ -17,7 +16,6 @@ Plug('hrsh7th/cmp-path')
 Plug('hrsh7th/cmp-cmdline')
 Plug('hrsh7th/cmp-vsnip')
 Plug('Mofiqul/vscode.nvim')
-Plug('airblade/vim-gitgutter')
 Plug('lewis6991/gitsigns.nvim')
 Plug('nvimdev/guard.nvim')
 Plug('nvimdev/guard-collection')
