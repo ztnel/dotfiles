@@ -1,5 +1,5 @@
   local ft = require('guard.filetype')
-  ft('c'):fmt('clang-format')
+  ft('c,cpp'):fmt('clang-format')
   require('guard').setup({
     -- the only options for the setup function
     fmt_on_save = true,
