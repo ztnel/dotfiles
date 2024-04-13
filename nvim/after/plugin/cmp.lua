@@ -1,5 +1,10 @@
 -- Set up nvim-cmp.
 local cmp = require('cmp')
+
+
+require("nvim-autopairs").setup{}
+require("lsp_signature").setup{{hint_prefix = ""}}
+
 cmp.setup({
     snippet = {
         -- REQUIRED - you must specify a snippet engine

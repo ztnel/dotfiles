@@ -1,19 +1,7 @@
 require'nvim-treesitter.configs'.setup {
   -- A list of parser names, or "all"
   ensure_installed = { "typescript", "c", "lua", "python" },
-  rainbow ={
-    colors={
-        "#dfb976",
-        "#c172d9",
-        "#5caeef",
-        "#4fb1bc",
-        "#97c26c",
-        "#abb2c0"
-    },
-    enable = true,
-    extended_mode = false,
-    max_file_lines = nil,
-  },
+
   -- Install parsers synchronously (only applied to `ensure_installed`)
   sync_install = false,
 

@@ -1,5 +1,6 @@
 local vim = vim
 local Plug = vim.fn['plug#']
+
 vim.call('plug#begin')
 Plug('duane9/nvim-rg')
 Plug('nvim-lualine/lualine.nvim')
@@ -19,11 +20,9 @@ Plug('Mofiqul/vscode.nvim')
 Plug('lewis6991/gitsigns.nvim')
 Plug('nvimdev/guard.nvim')
 Plug('nvimdev/guard-collection')
-Plug('p00f/nvim-ts-rainbow')
-Plug('jiangmiao/auto-pairs')
-Plug('mfussenegger/nvim-dap')
-Plug('rcarriga/nvim-dap-ui')
-Plug('jedrzejboczar/nvim-dap-cortex-debug')
-Plug('folke/neodev.nvim')
+Plug('williamboman/mason-lspconfig.nvim')
+Plug('williamboman/mason.nvim')
+Plug('ray-x/lsp_signature.nvim')
+Plug('windwp/nvim-autopairs')
 vim.call('plug#end')
 
