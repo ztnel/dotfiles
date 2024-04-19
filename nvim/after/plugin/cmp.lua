@@ -1,9 +1,7 @@
 -- Set up nvim-cmp.
 local cmp = require('cmp')
 
-
 require("nvim-autopairs").setup{}
-require("lsp_signature").setup{{hint_prefix = ""}}
 
 cmp.setup({
     snippet = {
@@ -28,8 +26,7 @@ cmp.setup({
     sources = cmp.config.sources({
         { name = 'nvim_lsp' },
         { name = 'vsnip' },
-    },
-    {
+        { name = 'nvim_lsp_signature_help' },
         { name = 'buffer' },
     })
 })
