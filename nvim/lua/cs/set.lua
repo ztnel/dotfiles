@@ -13,4 +13,14 @@ vim.opt.termguicolors = true
 vim.opt.wildignore = {'*/cache/*', '*/tmp/*'}
 vim.opt.modeline = false
 
-vim.cmd('colorscheme vscode')
+vim.cmd.colorscheme "vscode"
+
+local c = require('vscode.colors').get_colors()
+
+require('vscode').setup({
+    -- Alternatively set style in setup
+    -- Enable transparent background
+    transparent = true,
+    -- Underline `@markup.link.*` variants
+    underline_links = true,
+})
