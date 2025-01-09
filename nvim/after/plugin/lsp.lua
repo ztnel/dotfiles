@@ -6,7 +6,11 @@ require("mason-lspconfig").setup()
 
 lspconfig.pyright.setup{}
 lspconfig.cmake.setup{}
-lspconfig.clangd.setup{}
+lspconfig.clangd.setup{
+  capabilities=require('cmp_nvim_lsp').default_capabilities(),
+  filetypes = { 'c', 'cpp' },
+  cmd= { "clangd", "--offset-encoding=utf-16" }
+}
 
 -- Global mappings.
 -- See `:help vim.diagnostic.*` for documentation on any of the below functions
