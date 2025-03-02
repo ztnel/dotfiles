@@ -4,9 +4,11 @@ local dapui = require("dapui")
 
 dap.listeners.before.attach.dapui_config = function()
     dapui.open()
+    dapui.close(2)
 end
 dap.listeners.before.launch.dapui_config = function()
     dapui.open()
+    dapui.close(2)
 end
 dap.listeners.before.event_terminated.dapui_config = function()
     dapui.close()
