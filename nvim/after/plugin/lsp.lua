@@ -9,7 +9,7 @@ lspconfig.cmake.setup{}
 lspconfig.clangd.setup{
     capabilities=require('cmp_nvim_lsp').default_capabilities(),
     filetypes = { 'c', 'cpp' },
-    cmd= { "clangd", "--offset-encoding=utf-16" }
+    cmd = { "clangd", "--offset-encoding=utf-16", "--inlay-hints=true" }
 }
 lspconfig.gopls.setup{}
 
@@ -27,7 +27,8 @@ vim.api.nvim_create_autocmd('LspAttach', {
   callback = function(ev)
     -- Enable completion triggered by <c-x><c-o>
     vim.bo[ev.buf].omnifunc = 'v:lua.vim.lsp.omnifunc'
-
+    -- Enable inlay hints
+    vim.lsp.inlay_hint.enable(true)
     -- Buffer local mappings.
     -- See `:help vim.lsp.*` for documentation on any of the below functions
     local opts = { buffer = ev.buf }
