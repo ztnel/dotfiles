@@ -1,17 +1,20 @@
 local capabilities = require('cmp_nvim_lsp').default_capabilities()
-local lspconfig = require('lspconfig')
+
+vim.lsp.config(
+    'clangd',
+    {
+        settings = {
+            capabilities = capabilities,
+            filetypes = { 'c', 'cpp' },
+            cmd = { "clangd", "--offset-encoding=utf-16", "--inlay-hints=true", "--compile-commands-dir=build"}
+        }
+    }
+)
 
 require("mason").setup()
-require("mason-lspconfig").setup()
-
-lspconfig.pyright.setup{}
-lspconfig.cmake.setup{}
-lspconfig.clangd.setup{
-    capabilities=require('cmp_nvim_lsp').default_capabilities(),
-    filetypes = { 'c', 'cpp' },
-    cmd = { "clangd", "--offset-encoding=utf-16", "--inlay-hints=true" }
-}
-lspconfig.gopls.setup{}
+require("mason-lspconfig").setup({
+    ensure_installed = { 'clangd' }
+})
 
 -- Global mappings.
 -- See `:help vim.diagnostic.*` for documentation on any of the below functions
