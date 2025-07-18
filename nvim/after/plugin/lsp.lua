@@ -3,11 +3,9 @@ local capabilities = require('cmp_nvim_lsp').default_capabilities()
 vim.lsp.config(
     'clangd',
     {
-        settings = {
-            capabilities = capabilities,
-            filetypes = { 'c', 'cpp' },
-            cmd = { "clangd", "--offset-encoding=utf-16", "--inlay-hints=true", "--compile-commands-dir=build"}
-        }
+        capabilities = capabilities,
+        filetypes = { 'c', 'cpp' },
+        cmd = { "clangd", "--offset-encoding=utf-16", "--inlay-hints=true", "--compile-commands-dir=build"}
     }
 )
 
