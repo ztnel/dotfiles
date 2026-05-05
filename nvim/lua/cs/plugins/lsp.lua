@@ -16,6 +16,7 @@ return {
                 "clangd",
                 "pyright",
                 "ts_ls",
+                "copilot"
             },
             automatic_installation = true,
             automatic_enable = false,
