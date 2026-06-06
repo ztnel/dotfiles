@@ -1,10 +1,11 @@
 return {
     {
         "nvim-treesitter/nvim-treesitter",
-        event = { "BufReadPost", "BufNewFile" },
+        event = { "BufReadPre", "BufNewFile" },
         build = ":TSUpdate",
         opts = {
             ensure_installed = {
+                "go",
                 "c",
                 "cpp",
                 "markdown",
