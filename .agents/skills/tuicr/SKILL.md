@@ -1,6 +1,6 @@
 ---
 name: tuicr
-description: Use tuicr's review CLI to read and add comments in active TUI review sessions, and launch tuicr in tmux/zellij when a user needs an interactive review pane.
+description: Use tuicr's review CLI to read and add comments in active TUI review sessions, and launch tuicr in tmux when a user needs an interactive review pane.
 ---
 
 # tuicr Review Workflow
@@ -22,7 +22,7 @@ First decide which workflow the user is asking for:
    - Do not add your own review comments, do not preemptively review your own
      patch, and do not impersonate the user's comments.
 
-2. **Agent review of an AI-generated patch**
+2. **Agent review of a patch**
    - The user wants you to understand, critique, or summarize a patch.
    - You may inspect the patch and propose findings.
    - If you can confidently identify this workflow and the target session, add
@@ -53,8 +53,8 @@ If the user's intent is ambiguous, ask which workflow they want.
      `"active": true` as a convenience signal. If slug resolution fails, ask the
      user for the slug or repo path used by the session.
 
-The CLI works even if the agent is not running inside tmux or zellij, so do not
-require a multiplexer just to connect to an existing active session.
+The CLI works even if the agent is not running inside tmux, so do not require
+another multiplexer just to connect to an existing active session.
 
 ## Start A Session
 
@@ -63,32 +63,46 @@ When the user needs an interactive tuicr pane and no active session exists:
 | Environment | Action |
 |-------------|--------|
 | `$TMUX` is set | Run `tuicr-wrapper.sh /path/to/repo` |
-| `$ZELLIJ` is set | Run `tuicr-wrapper-zellij.sh /path/to/repo` |
 | Neither is set | Tell the user you are waiting for them to start `tuicr` in the repo, then attach with `tuicr review list` after they say it is ready |
-
-If both `$TMUX` and `$ZELLIJ` are set, prefer the innermost multiplexer if that
-is clear; otherwise ask.
 
 Wrapper paths are relative to this skill directory:
 
 ```bash
 <skill-directory>/tuicr-wrapper.sh /path/to/repo
-<skill-directory>/tuicr-wrapper-zellij.sh /path/to/repo
 ```
 
+If your tool can launch background processes, start the wrapper detached from
+the current Copilot session so it can keep watching for new human comments
+while the agent continues working. Do not keep the main agent blocked on the
+wrapper process when detached mode is available.
+
 If your tool supports command timeouts, use a long timeout, such as 10 minutes,
-because the wrappers wait for the TUI to exit. Once the TUI creates its active
+because the wrapper waits for the TUI to exit. Once the TUI creates its active
 session, use `tuicr review list --repo /path/to/repo` to capture the slug. If
 your environment cannot run another command while the wrapper is waiting, read
 the comments after the user exits tuicr.
+
+The tmux wrapper must start a live watch loop for every review session it
+launches. That watcher should identify human comments by missing `username`
+metadata and should ignore agent-authored comments that do carry agent
+identity. If the flattened `tuicr review comments` output does not expose that
+metadata, the watcher should fall back to the persisted session JSON where the
+author data is available. When new human comment IDs appear, the wrapper should
+wake the originating agent pane with both `tmux display-message` and `tmux
+send-keys` so the agent is nudged to read the session again. `focus-events on`
+improves `send-keys` reliability for this workflow. Working-tree
+reviews use the tmux window name `tuicr-unstaged`; explicit revset-only reviews
+use `tuicr-<base...head>`. Working-tree
+reviews use the tmux window name `tuicr-unstaged`; explicit revset-only reviews
+use `tuicr-<base...head>`.
 
 ## Read User Comments
 
 This is the main review loop for user-led review.
 
-There is no push stream from tuicr to the agent. Read comments by running the
-CLI on demand. After the user says comments are ready, or after the TUI exits,
-run:
+There is no native push stream from tuicr to the agent. Read comments by
+running the CLI on demand. After the user says comments are ready, after the
+tmux wrapper wakes you for new comments, or after the TUI exits, run:
 
 ```bash
 tuicr review comments --repo /path/to/repo --session <slug>
@@ -104,19 +118,53 @@ The command emits JSON. Each comment includes fields like:
 - `side`
 - `comment_type`
 - `lifecycle_state`
+- `username` when available
 - `content`
 
 Treat these comments as the user's review feedback:
+
+- Missing or empty `username`: human-authored comment
+- Present `username`: agent-authored comment
+- In persisted local session files, the same distinction may appear as
+  `author: "user"` for humans and a model name for agent-authored comments
 
 - `issue`: blocking problem to fix first
 - `suggestion`: consider implementing or explain why not
 - `note`: answer or acknowledge
 - `praise`: no action required
 
-If you are waiting during an active review, poll this command about every 30
-seconds and compare comment IDs with the previous result. Read immediately when
-the user says comments are ready. Stop polling once the user says the review is
-done or your tooling would block other work.
+When a human comment requests a change, reply in tuicr before implementing the
+change. Use a `reply` comment on the same file, side, start line, and end line
+so the conversation stays attached to the original review context. If the human
+comment spans a range, your reply must use the exact same range with both
+`--line` and `--end-line`.
+
+Use this reply structure for the first reply on every change request:
+
+```text
+<verdict> - <brief reason for the verdict>
+
+<current state such as waiting for human feedback, queued, dispatched to subagent, in progress, or completed>
+```
+
+Guidance:
+
+- `agree`: the request is valid and you intend to make the change
+- `disagree`: the request should not be applied; explain why
+- `needs clarification`: the request is ambiguous or conflicts with other constraints
+- The first line should combine the verdict and justification in the format
+  `<verdict> - <brief reason>`.
+- Keep the justification brief and specific to the request
+- Keep the status current as work progresses; if you are blocked on the human,
+  say so explicitly
+- After the first reply, subsequent replies should report only the delta. If
+  only the status changed, a short update such as `done` is preferred over
+  repeating the earlier verdict and justification.
+
+If you are waiting during an active review without the tmux live watch, poll
+this command about every 30 seconds and compare comment IDs with the previous
+result. Read immediately when the user says comments are ready. Stop polling
+once the user says the review is done or your tooling would block other work.
 
 If the result is empty, ask whether the user saved comments in the intended
 session or whether another active session should be selected. If the review may
@@ -135,7 +183,24 @@ Defaults:
 - Use review-level comments only for whole-review summaries.
 - Use `--type issue` for problems by default.
 - Use `suggestion`, `note`, or `praise` when that better matches the intent.
-- Pass the current agent model ID to `--username` so agent comments are visually distinguishable.
+- Always pass the current agent model ID to `--username` on every agent-authored
+  comment.
+- Use `--type reply` for agent replies in a human/agent back-and-forth thread.
+- For replies, post on the exact same file, side, start line, and end line as
+  the comment you are answering so tuicr keeps the thread in sequential order.
+- For single-line comments, use only `--line`. For range comments, use both
+  `--line` and `--end-line`, and make them exactly equal to the human comment's
+  `start_line` and `end_line`.
+- For human change requests, the first reply must include verdict,
+  justification, and status in that order before you implement or reject the
+  request.
+- After that first reply, send only incremental follow-up updates rather than
+  repeating the full structure.
+
+Use replies to keep the conversation anchored to one block of text. When a
+human asks a follow-up question or challenges a proposed fix on a specific
+line, answer with a `reply` comment at that exact location instead of opening a
+new top-level comment elsewhere.
 
 Examples:
 
@@ -149,37 +214,6 @@ tuicr review add --repo /path/to/repo --session <slug> \
   "Handle the empty case here."
 ```
 
-```bash
-tuicr review add --repo /path/to/repo --session <slug> \
-  --target-file src/main.rs \
-  --type suggestion \
-  --username "claude-sonnet-4.5" \
-  "Consider splitting this file-level concern into a helper."
-```
-
-Omit `--target-file` for a review-level comment. Add `--end-line` for a range
-comment. Use `--side old` for removed lines and `--side new` for added or
-unchanged lines in the new file.
-
-For structured input, use `--input` with literal JSON, `@path/to/file.json`, or
-`-` for stdin. Supported target types are `review`, `file`, `line`, and
-`line_range`.
-
-## Legacy Export Output
-
-Older wrapper-driven flows may emit:
-
-```text
-=== TUICR INSTRUCTIONS ===
-...
-=== END TUICR INSTRUCTIONS ===
-```
-
-If present, process those instructions. Otherwise prefer
-`tuicr review comments`; it is the primary source of review feedback. If the
-wrapper mentions clipboard export, ask the user to paste it only when the CLI
-comments are unavailable.
-
 ## Multiplexer Tips
 
 tmux:
@@ -189,21 +223,13 @@ tmux:
 - Resize panes: `Ctrl-b` then `Ctrl-arrow`
 - Zoom pane: `Ctrl-b` then `z`
 
-zellij:
-
-- Switch panes: `Alt` + arrow keys
-- Close tuicr: press `q`
-- Resize panes: `Ctrl-n`, then arrow keys
-- Toggle fullscreen: `Alt-f`
-- Cycle stacked panes: `Alt` + `[` / `]`
-
 ## Error Handling
 
 | Situation | Action |
 |-----------|--------|
 | Multiple plausible active sessions | Ask which session slug to use |
-| No active session, tmux/zellij available | Start a new tuicr pane with the matching wrapper |
-| No active session, no multiplexer | Tell the user you are waiting for them to start `tuicr` |
+| No active session, tmux available | Start a new tuicr pane with the wrapper |
+| No active session, no tmux | Tell the user you are waiting for them to start `tuicr` |
 | `tuicr` not installed | Tell the user to install tuicr |
 | Not a repository | Ask for the correct repo directory |
 | Comments are empty | Confirm the selected session or ask the user to save/add comments |
@@ -213,4 +239,3 @@ zellij:
 - The user only wants raw `git diff` output.
 - The user explicitly asks for a non-tuicr review workflow.
 - The task is remote PR review and no tuicr PR session is involved.
-
