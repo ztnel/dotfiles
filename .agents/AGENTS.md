@@ -90,8 +90,7 @@ Do **not** create planning markdown files inside the repository tree unless thei
 
 When operating as the main/root agent, not a delegated sub-agent:
 
- - If `TMUX` is set, the current working directory is inside a git repository, and that repository has unstaged changes, open a `tuicr` review window before continuing with the task.
- - Use the tmux wrapper from the `tuicr` skill under `~/.agents/skills/tuicr`.
+ - If `TMUX` is set, the current working directory is inside a git repository with unstaged changes, open `tuicr` in a new tmux window in the same session as the active agent before continuing with the task, using the tmux wrapper from the `tuicr` skill under `~/.agents/skills/tuicr`.
  - This automatic `tuicr` launch requirement applies only to the main/root agent. Delegated sub-agents should not auto-launch `tuicr` unless the human explicitly asks for it.
 
 ---

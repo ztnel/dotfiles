@@ -33,6 +33,7 @@ link_pairs=(
   "$repo_root/.agents" "$HOME/.agents"
   "$repo_root/tuicr" "$HOME/.config/tuicr"
   "$repo_root/nvim" "$HOME/.config/nvim"
+  "$repo_root/.zshrc" "$HOME/.zshrc"
 )
 
 for ((i = 0; i < ${#link_pairs[@]}; i += 2)); do
