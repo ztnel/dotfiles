@@ -77,12 +77,14 @@ tuicr review list --repo <repo>                       # look for "active": true
 ~/.agents/skills/tuicr/lib/tuicr_up.py <repo>         # working-tree review window
 ```
 
-`tuicr_up.py` refreshes refs and opens a tmux window; it refuses only if tuicr
-is already reviewing **that same checkout**. For full control, open directly:
-`tmux new-window -d -n review -c <repo> "tuicr -w"` (uncommitted changes) or
-`"tuicr -r '<revset>'"` (a commit range). Requires `$TMUX`; if there is no
-multiplexer, tell the human you are waiting for them to start `tuicr`, then
-attach via `tuicr review list`.
+`tuicr_up.py` refreshes refs, opens a tmux window, and starts the review
+watch daemon for the current Copilot CLI session; if tuicr is already
+reviewing **that same checkout**, it reuses the active session and still starts
+the watcher. For full control, open directly: `tmux new-window -d -n review
+-c <repo> "tuicr -w"` (uncommitted changes) or `"tuicr -r '<revset>'"` (a
+commit range). Requires `$TMUX`; if there is no multiplexer, tell the human
+you are waiting for them to start `tuicr`, then attach via `tuicr review
+list`.
 
 The CLI works outside tmux, so never require a multiplexer just to read an
 existing session.

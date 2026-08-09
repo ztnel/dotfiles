@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_lib"))
 from skillkit import paths  # noqa: E402
 from skillkit.cli import run_main  # noqa: E402
 from skillkit.errors import SkillError  # noqa: E402
+from skillkit.lock import PidFile  # noqa: E402
 from skillkit.proc import command_of, detach, pid_alive, terminate  # noqa: E402
 
 #: Substrings that identify a tuicr-watch process in its command line. Both
@@ -105,7 +106,7 @@ def sanitize(name: str) -> str:
     return _SAFE_NAME_RE.sub("-", name)
 
 
-def stop_pidfile(pidfile: Path) -> None:
+def _retire_pidfile(pidfile: Path, *, announce: bool) -> None:
     """Stop the daemon recorded in *pidfile* and clear its state files.
 
     A pidfile records a PID, not an identity, and the kernel recycles PIDs. A
@@ -130,7 +131,13 @@ def stop_pidfile(pidfile: Path) -> None:
             terminate(pid)
     pidfile.unlink(missing_ok=True)
     pidfile.with_suffix(".persistent").unlink(missing_ok=True)
-    print(f"STOPPED={pidfile}")
+    if announce:
+        print(f"STOPPED={pidfile}")
+
+
+def stop_pidfile(pidfile: Path) -> None:
+    """Stop the daemon recorded in *pidfile* and clear its state files."""
+    _retire_pidfile(pidfile, announce=True)
 
 
 def list_watchers(state_dirs: list[Path]) -> int:
@@ -159,8 +166,19 @@ def stop_all(state_dirs: list[Path], prefix: str, exclude: str) -> int:
     return 0
 
 
+def _pidfiles_for_pid(state_dirs: list[Path], pid: int) -> list[Path]:
+    """Every watcher pidfile in *state_dirs* that still names *pid*."""
+    matches: list[Path] = []
+    for state_dir in state_dirs:
+        for pidfile in sorted(state_dir.glob("*.pid")):
+            raw = pidfile.read_text(encoding="utf-8", errors="replace").strip()
+            if raw.isdigit() and int(raw) == pid:
+                matches.append(pidfile)
+    return matches
+
+
 def start(args: argparse.Namespace, state_dir: Path) -> int:
-    """Start a watcher daemon, or reuse a live one.
+    """Start a watcher daemon, replacing any live one for this name.
 
     Raises:
         SkillError: Exit 2 for a missing required option, 3 for a missing
@@ -176,21 +194,29 @@ def start(args: argparse.Namespace, state_dir: Path) -> int:
     if not Path(args.repo).is_dir():
         raise SkillError(f"repo '{args.repo}' does not exist", code=3)
 
+    lookup = search_dirs(state_dir, include_legacy=not args.state_dir)
     name = sanitize(args.name or args.session)
     pidfile = state_dir / f"{name}.pid"
     logfile = state_dir / f"{name}.log"
 
-    # Already running with a live PID? Reuse it, so callers can start
-    # idempotently without checking first.
+    lock_key = paths.short_hash(str(Path(args.repo).resolve()), args.session)
+    lock = PidFile(state_dir / f"{lock_key}.lock")
+    owner = lock.live_owner()
+    if owner is not None:
+        if not lock.stop_owner():
+            raise SkillError(
+                f"another process (PID {owner}) already holds {lock.path.name}.",
+                code=8,
+                hint="Stop it first, or use the watch-up helper which reuses a live daemon.",
+            )
+        for candidate in _pidfiles_for_pid(lookup, owner):
+            candidate.unlink(missing_ok=True)
+            candidate.with_suffix(".persistent").unlink(missing_ok=True)
+
+    # Replace any existing watcher for this (repo, session) pair before
+    # starting the fresh daemon that should own the session now.
     if pidfile.is_file():
-        raw = pidfile.read_text(encoding="utf-8", errors="replace").strip()
-        if raw.isdigit() and pid_alive(int(raw)):
-            print(f"WATCH_PID={raw}")
-            print(f"WATCH_PIDFILE={pidfile}")
-            print(f"WATCH_LOG={logfile}")
-            print(f"WATCH_NAME={name}")
-            print("(already running)", file=sys.stderr)
-            return 0
+        _retire_pidfile(pidfile, announce=False)
 
     command = [
         sys.executable, str(watcher),

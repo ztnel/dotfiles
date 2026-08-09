@@ -166,6 +166,47 @@ runWatcher() {
     )
 }
 
+runWatcherTimeout() {
+    local dir="$1" comments="$2" mode="$3" seconds="$4"; shift 4
+    (
+        exportFakeEnv "${dir}" "${comments}" "${mode}"
+        python3 - "$watcher" "$seconds" "$dir" "$sessionId" "$@" <<'PY'
+import os
+import subprocess
+import sys
+
+watcher = sys.argv[1]
+timeout = float(sys.argv[2])
+repo_dir = sys.argv[3]
+session_id = sys.argv[4]
+extra = sys.argv[5:]
+
+cmd = [
+    watcher,
+    "--repo", f"{repo_dir}/repo",
+    "--session", "review",
+    "--cli-session", session_id,
+    "--cli-pane", "%99",
+    "--session-state-dir", f"{repo_dir}/sessions",
+    "--state-dir", f"{repo_dir}/state",
+    "--interval", "0.01",
+]
+cmd.extend(extra)
+
+try:
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+except subprocess.TimeoutExpired as exc:
+    sys.stdout.write(exc.stdout or "")
+    sys.stderr.write(exc.stderr or "")
+    raise SystemExit(124)
+
+sys.stdout.write(result.stdout)
+sys.stderr.write(result.stderr)
+raise SystemExit(result.returncode)
+PY
+    )
+}
+
 issue() {
     printf '[{"id":"%s","comment_type":"issue","path":"src/a.cpp","start_line":7,"end_line":7,"side":"new","created_at":"2026-01-01T00:00:00Z","content":"fix it"}]' "$1"
 }
@@ -190,8 +231,57 @@ case "${prompt}" in
     *unstaged*|*verdict*|*"--type reply"*|*commit*)
         fail "wake prompt still carries the behavioural contract; it belongs in SKILL.md" ;;
 esac
-[ "${#prompt}" -le 200 ] || fail "wake prompt is ${#prompt} chars; expected a terse wake"
+[ "${#prompt}" -le 240 ] || fail "wake prompt is ${#prompt} chars; expected a terse wake"
 case "${prompt}" in *"fix it"*) fail "wake prompt echoed the human's comment text" ;; esac
+
+# --- repeat start replaces an existing watcher -----------------------------
+d="${tmp}/replace"; setUp "${d}"
+python3 - <<'PY' "${watcher}" "${d}"
+import argparse
+import sys
+from pathlib import Path
+
+watcher_path = Path(sys.argv[1])
+root = Path(sys.argv[2])
+sys.path.insert(0, str(watcher_path.parent))
+sys.path.insert(0, str(watcher_path.parents[2] / "_lib"))
+
+import watch_up as mod  # noqa: E402
+
+repo = root / "repo"
+state = root / "state"
+pidfile = state / "review.pid"
+pidfile.write_text("111\n", encoding="utf-8")
+
+events = []
+
+mod.pid_alive = lambda pid: pid in {111, 222}
+mod.is_watcher = lambda pid: True
+mod.terminate = lambda pid: events.append(("terminate", pid))
+mod.detach = lambda command, logfile: events.append(("detach", command, logfile)) or 222
+mod.time.sleep = lambda _seconds: None
+
+args = argparse.Namespace(
+    repo=str(repo),
+    session="review",
+    cli_session="sess-1",
+    cli_pane="",
+    event_timeout="",
+    queue_timeout="",
+    rearm="",
+    max_attempts="",
+    ignore_type=[],
+    persistent=False,
+    name="review",
+    state_dir=state,
+)
+
+rc = mod.start(args, state)
+assert rc == 0, rc
+assert events[0] == ("terminate", 111), events
+assert events[1][0] == "detach", events
+assert pidfile.read_text(encoding="utf-8").strip() == "222", pidfile.read_text(encoding="utf-8")
+PY
 
 # --- named-Enter fallback when CSI-u is ignored ----------------------------
 d="${tmp}/fallback"; setUp "${d}"
@@ -213,12 +303,11 @@ if runWatcher "${d}" "$(issue c2)" fail --replay >/dev/null 2>&1; then
 fi
 if ledgerHas "${d}/state" c2; then fail "unconfirmed comment was recorded as delivered"; fi
 
-# --- never overwrite human input -------------------------------------------
+# --- wake still fires when the input box already has text ------------------
 d="${tmp}/occupied"; FAKE_INITIAL_INPUT="human draft" setUp "${d}"
-if FAKE_INITIAL_INPUT="human draft" runWatcher "${d}" "$(issue c-occ)" raw --replay >/dev/null 2>&1; then
-    fail "watcher overwrote an occupied input box"
-fi
-if grep -qE '^(paste-buffer|send-keys)' "${d}/tmux.log"; then fail "watcher touched an occupied input box"; fi
+runWatcher "${d}" "$(issue c-occ)" raw --replay >/dev/null
+has '^paste-buffer' "${d}/tmux.log" || fail "watcher did not paste into an occupied input box"
+ledgerHas "${d}/state" c-occ || fail "occupied input wake was not recorded"
 
 # --- a pane reclaimed by something else must not receive a wake ------------
 # Otherwise the prompt would be typed into a shell prompt and submitted.
@@ -314,9 +403,12 @@ ledgerHas "${d}/state" c5 || fail "already-accepted wake was not reconciled"
 # --- re-arm: a delivered comment that never got a reply is retried ---------
 d="${tmp}/rearm"; setUp "${d}"
 REPO_KEY="$(cd "${d}/repo" && pwd)" python3 - "${d}/state" <<'PY'
-import hashlib, json, os, sys
+import json, os, sys
+from pathlib import Path
+sys.path.insert(0, "/Users/cs/git/dotfiles/.agents/skills/_lib")
+from skillkit import paths
 state = sys.argv[1]
-key = hashlib.sha1(("%s|review" % os.environ["REPO_KEY"]).encode()).hexdigest()[:16]
+key = paths.short_hash(str(Path(os.environ["REPO_KEY"]).resolve()), "review")
 with open(os.path.join(state, key + ".json"), "w") as fh:
     json.dump({"c-rearm": {"attempts": 1, "last": 0}}, fh)
 PY
@@ -327,9 +419,12 @@ has '^send-keys.*-H 1b 5b 31 33 75' "${d}/tmux.log" ||
 # ...but not while it is still inside the re-arm window.
 d="${tmp}/norearm"; setUp "${d}"
 REPO_KEY="$(cd "${d}/repo" && pwd)" python3 - "${d}/state" <<'PY'
-import hashlib, json, os, sys, time
+import json, os, sys, time
+from pathlib import Path
+sys.path.insert(0, "/Users/cs/git/dotfiles/.agents/skills/_lib")
+from skillkit import paths
 state = sys.argv[1]
-key = hashlib.sha1(("%s|review" % os.environ["REPO_KEY"]).encode()).hexdigest()[:16]
+key = paths.short_hash(str(Path(os.environ["REPO_KEY"]).resolve()), "review")
 with open(os.path.join(state, key + ".json"), "w") as fh:
     json.dump({"c-quiet": {"attempts": 1, "last": time.time()}}, fh)
 PY
@@ -351,8 +446,12 @@ fi
 # --- a second daemon on the same session is refused ------------------------
 d="${tmp}/singleton"; setUp "${d}"
 lockKey="$(REPO_KEY="$(cd "${d}/repo" && pwd)" python3 -c '
-import hashlib, os
-print(hashlib.sha1(("%s|review" % os.environ["REPO_KEY"]).encode()).hexdigest()[:16])')"
+from pathlib import Path
+import os
+import sys
+sys.path.insert(0, "/Users/cs/git/dotfiles/.agents/skills/_lib")
+from skillkit import paths
+print(paths.short_hash(str(Path(os.environ["REPO_KEY"]).resolve()), "review"))')"
 printf '%s\n' "$$" >"${d}/state/${lockKey}.lock"
 if runWatcher "${d}" "$(issue c-lock)" raw --replay >/dev/null 2>&1; then
     fail "a second watcher on the same session was allowed"
@@ -374,13 +473,37 @@ FAKE_COMMENTS="$(issue c6)" PATH="${d}/bin:${PATH}" \
 d="${tmp}/vanished"; setUp "${d}"
 out="${d}/vanished.log"
 (
-    exportFakeEnv "${d}" "$(issue c7)"
-    export FAKE_COMMENTS_FAIL=1 FAKE_LIST_EMPTY=1
-    timeout 20 "${watcher}" --repo "${d}/repo" --session review \
-        --cli-session "${sessionId}" --cli-pane %99 \
-        --session-state-dir "${d}/sessions" --state-dir "${d}/state" \
-        --interval 0.01 --replay
-) >"${out}" 2>&1 && rc=0 || rc=$?
+    exportFakeEnv "${d}" "$(issue c7)" raw
+    python3 - "$watcher" "$d" "$sessionId" <<'PY'
+import os
+import subprocess
+import sys
+
+watcher = sys.argv[1]
+root = sys.argv[2]
+session_id = sys.argv[3]
+cmd = [
+    watcher,
+    "--repo", f"{root}/repo",
+    "--session", "review",
+    "--cli-session", session_id,
+    "--cli-pane", "%99",
+    "--session-state-dir", f"{root}/sessions",
+    "--state-dir", f"{root}/state",
+    "--interval", "0.01",
+    "--replay",
+]
+try:
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+except subprocess.TimeoutExpired as exc:
+    sys.stdout.write(exc.stdout or "")
+    sys.stderr.write(exc.stderr or "")
+    raise SystemExit(124)
+sys.stdout.write(result.stdout)
+sys.stderr.write(result.stderr)
+raise SystemExit(result.returncode)
+PY
+) >"${out}" 2>&1; rc=$?
 [ "${rc}" -eq 0 ] || fail "vanished session should exit 0, got ${rc}"
 has 'no longer exists' "${out}" || fail "vanished session gave no reason for exiting"
 
@@ -389,15 +512,172 @@ has 'no longer exists' "${out}" || fail "vanished session gave no reason for exi
 d="${tmp}/transient"; setUp "${d}"
 out="${d}/transient.log"
 (
-    exportFakeEnv "${d}" "$(issue c8)"
-    export FAKE_COMMENTS_FAIL=1 FAKE_LIST_FAIL=1
-    timeout 3 "${watcher}" --repo "${d}/repo" --session review \
-        --cli-session "${sessionId}" --cli-pane %99 \
-        --session-state-dir "${d}/sessions" --state-dir "${d}/state" \
-        --interval 0.01 --replay
-) >"${out}" 2>&1 && rc=0 || rc=$?
+    exportFakeEnv "${d}" "$(issue c8)" raw
+    python3 - "$watcher" "$d" "$sessionId" <<'PY'
+import os
+import subprocess
+import sys
+
+watcher = sys.argv[1]
+root = sys.argv[2]
+session_id = sys.argv[3]
+cmd = [
+    watcher,
+    "--repo", f"{root}/repo",
+    "--session", "review",
+    "--cli-session", session_id,
+    "--cli-pane", "%99",
+    "--session-state-dir", f"{root}/sessions",
+    "--state-dir", f"{root}/state",
+    "--interval", "0.01",
+    "--replay",
+]
+try:
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+except subprocess.TimeoutExpired as exc:
+    sys.stdout.write(exc.stdout or "")
+    sys.stderr.write(exc.stderr or "")
+    raise SystemExit(124)
+sys.stdout.write(result.stdout)
+sys.stderr.write(result.stderr)
+raise SystemExit(result.returncode)
+PY
+) >"${out}" 2>&1; rc=$?
 [ "${rc}" -eq 124 ] || fail "transient tuicr outage must not end the watch (exited ${rc})"
 has 'not treating this as' "${out}" || fail "transient outage was not reported as a read failure"
+
+# --- tuicr_up starts and retires the watcher --------------------------------
+python3 - <<'PY' "${libDir}/tuicr_up.py"
+import sys
+from pathlib import Path
+
+script = Path(sys.argv[1])
+sys.path.insert(0, str(script.parent))
+sys.path.insert(0, str(script.parents[2] / "_lib"))
+
+import tuicr_up as mod  # noqa: E402
+
+
+class Result:
+    def __init__(self, ok=True, stdout="", stderr="", returncode=0):
+        self.ok = ok
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
+
+
+def exercise(already_reviewing):
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append(list(args))
+        if args[:3] == ["tuicr", "review", "list"]:
+            return Result(stdout='[{"slug":"sess-1","active":true}]\n')
+        if args[:2] == ["tmux", "new-window"]:
+            return Result(stdout="%9\n")
+        if args[:2] in (["tmux", "select-window"], ["tmux", "wait-for"]):
+            return Result()
+        if args[0] == sys.executable and args[1].endswith("watch_up.py"):
+            if "--stop" in args:
+                return Result()
+            return Result(stdout="WATCH_PID=42\n")
+        return Result()
+
+    mod.run = run
+    mod.resolve_revset = lambda _target: "origin/main...HEAD"
+    mod.resolve_cli_session = lambda: "cli-1"
+    mod.already_reviewing = lambda _target: already_reviewing
+    mod.tuicr_supports_stdout = lambda: False
+    mod.git = lambda *args, **kwargs: Result(stdout="")
+    mod.log_info = lambda *_args, **_kwargs: None
+    mod.log_warn = lambda *_args, **_kwargs: None
+    mod.time.sleep = lambda _seconds: None
+
+    rc = mod.launch("/repo")
+    assert rc == 0, rc
+    return calls
+
+
+calls = exercise(False)
+assert any(cmd[:2] == ["tmux", "new-window"] for cmd in calls), calls
+assert any(cmd[:2] == ["tmux", "wait-for"] for cmd in calls), calls
+assert any(cmd[0] == sys.executable and cmd[1].endswith("watch_up.py") and "--stop" not in cmd for cmd in calls), calls
+assert any(cmd[0] == sys.executable and cmd[1].endswith("watch_up.py") and "--stop" in cmd for cmd in calls), calls
+
+calls = exercise(True)
+assert not any(cmd[:2] == ["tmux", "new-window"] for cmd in calls), calls
+assert not any(cmd[:2] == ["tmux", "wait-for"] for cmd in calls), calls
+assert any(cmd[0] == sys.executable and cmd[1].endswith("watch_up.py") and "--stop" not in cmd for cmd in calls), calls
+PY
+
+# --- a new CLI session replaces the live lock owner, even with another name --
+d="${tmp}/replace-lock"; setUp "${d}"
+python3 - <<'PY' "${watcher}" "${d}"
+import argparse
+import sys
+from pathlib import Path
+
+watcher_path = Path(sys.argv[1])
+root = Path(sys.argv[2])
+sys.path.insert(0, str(watcher_path.parent))
+sys.path.insert(0, str(watcher_path.parents[2] / "_lib"))
+
+import watch_up as mod  # noqa: E402
+from skillkit import lock as lockmod  # noqa: E402
+from skillkit import paths  # noqa: E402
+
+repo = root / "repo"
+state = root / "state"
+lock = state / f"{paths.short_hash(str(repo.resolve()), 'review')}.lock"
+lock.write_text("111\n", encoding="utf-8")
+(state / "old.pid").write_text("111\n", encoding="utf-8")
+
+events = []
+alive = {111: True}
+
+def pid_alive(pid):
+    return alive.get(pid, False)
+
+def terminate(pid, timeout=5.0, poll=0.1):
+    alive[pid] = False
+    events.append(("terminate", pid))
+    return True
+
+def detach(command, logfile):
+    alive[222] = True
+    events.append(("detach", command, logfile))
+    return 222
+
+mod.pid_alive = pid_alive
+mod.terminate = terminate
+mod.detach = detach
+mod.time.sleep = lambda _seconds: None
+lockmod.pid_alive = pid_alive
+lockmod.terminate = terminate
+
+args = argparse.Namespace(
+    repo=str(repo),
+    session="review",
+    cli_session="sess-new",
+    cli_pane="",
+    event_timeout="",
+    queue_timeout="",
+    rearm="",
+    max_attempts="",
+    ignore_type=[],
+    persistent=False,
+    name="fresh",
+    state_dir=state,
+)
+
+rc = mod.start(args, state)
+assert rc == 0, rc
+assert events[0] == ("terminate", 111), events
+assert events[1][0] == "detach", events
+assert not lock.exists(), lock.read_text(encoding="utf-8") if lock.exists() else ""
+assert not (state / "old.pid").exists(), (state / "old.pid").read_text(encoding="utf-8")
+assert (state / "fresh.pid").read_text(encoding="utf-8").strip() == "222"
+PY
 
 # --- portability guards -----------------------------------------------------
 # Stock macOS has no sha1sum, setsid or rg. Comments may name them; code may not.

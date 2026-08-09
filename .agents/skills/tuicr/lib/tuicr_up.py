@@ -3,8 +3,9 @@
 
 Refreshes the review refs (so the diff reflects the remote, not a stale local
 copy), opens a detached tmux window running tuicr over the resolved revset,
-switches focus to it, and blocks until tuicr exits — then surfaces whatever
-tuicr exported.
+starts the review watch daemon for the current Copilot CLI session, switches
+focus to the review window, and blocks until tuicr exits — then surfaces
+whatever tuicr exported.
 
 Usage::
 
@@ -24,17 +25,21 @@ Environment variables:
 from __future__ import annotations
 
 import os
+import json
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_lib"))
 
+from skillkit import paths  # noqa: E402
+from skillkit.copilot import session_for_pane_pid  # noqa: E402
 from skillkit.cli import parse_metadata, run_main  # noqa: E402
 from skillkit.errors import SkillError  # noqa: E402
 from skillkit.gitio import git  # noqa: E402
 from skillkit.proc import run, which  # noqa: E402
-from skillkit.tmuxio import inside_tmux  # noqa: E402
+from skillkit.tmuxio import inside_tmux, pane_pid  # noqa: E402
 
 #: ANSI colours for the `[tuicr]` log prefix. Suppressed when stdout is not a
 #: TTY so captured output stays clean.
@@ -42,6 +47,8 @@ _GREEN = "\033[0;32m"
 _YELLOW = "\033[1;33m"
 _RED = "\033[0;31m"
 _RESET = "\033[0m"
+_WATCH_RETRY_DELAY = 0.1
+_WATCH_RETRY_LIMIT = 20
 
 
 def _log(colour: str, message: str, stream=sys.stdout) -> None:
@@ -119,17 +126,98 @@ def resolve_revset(target_dir: str) -> str:
     return revset
 
 
+def resolve_cli_session() -> str:
+    """Resolve the Copilot CLI session bound to the current tmux pane."""
+    pane = os.environ.get("TMUX_PANE", "")
+    if not pane:
+        raise SkillError("could not resolve the current tmux pane")
+    pid = pane_pid(pane)
+    if pid is None:
+        raise SkillError(f"could not resolve the pane PID for {pane}")
+    return session_for_pane_pid(pid).session_id
+
+
+def active_review_slug(target_dir: str) -> str:
+    """Resolve the single active tuicr review session for *target_dir*.
+
+    A new review window is expected to make exactly one session active. If the
+    session has not settled yet, the helper retries briefly before failing so
+    the launcher does not race the TUI startup.
+    """
+    for attempt in range(_WATCH_RETRY_LIMIT):
+        result = run(["tuicr", "review", "list", "--repo", target_dir])
+        if result.ok:
+            try:
+                sessions = json.loads(result.stdout or "[]")
+            except json.JSONDecodeError:
+                sessions = []
+            active = [item.get("slug", "") for item in sessions if item.get("active")]
+            active = [slug for slug in active if slug]
+            if len(active) == 1:
+                return active[0]
+            if len(active) > 1:
+                raise SkillError(
+                    f"multiple active tuicr sessions for {target_dir}: {', '.join(active)}"
+                )
+        if attempt + 1 < _WATCH_RETRY_LIMIT:
+            time.sleep(_WATCH_RETRY_DELAY)
+    raise SkillError(f"could not resolve an active tuicr session for {target_dir}")
+
+
+def start_watch(target_dir: str, session_slug: str, cli_session: str) -> str:
+    """Start the watch daemon for *session_slug* and return its pidfile label."""
+    watcher = Path(__file__).resolve().parent / "watch_up.py"
+    if not watcher.is_file():
+        raise SkillError(f"Watch helper not found: {watcher}")
+
+    name = f"tuicr-{paths.short_hash(target_dir, session_slug, cli_session)}"
+    args = [
+        sys.executable,
+        str(watcher),
+        "--repo", target_dir,
+        "--session", session_slug,
+        "--cli-session", cli_session,
+        "--name", name,
+    ]
+    result = run(args)
+    if result.stderr:
+        print(result.stderr, file=sys.stderr, end="")
+    if not result.ok:
+        raise SkillError(f"could not start watch daemon: {result.stderr or result.stdout}", code=result.returncode)
+    if result.stdout:
+        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+    return name
+
+
+def stop_watch(name: str) -> None:
+    """Stop the watch daemon started under *name*."""
+    watcher = Path(__file__).resolve().parent / "watch_up.py"
+    run([sys.executable, str(watcher), "--stop", name])
+
+
 def launch(target_dir: str) -> int:
     """Open tuicr in a tmux window and block until it exits."""
     window_name = os.environ.get("TUICR_WINDOW_NAME", "tuicr")
     remote = os.environ.get("TUICR_REMOTE", "origin")
+    cli_session = resolve_cli_session()
+    watch_name = ""
 
     log_info(f"Refreshing review refs from '{remote}'")
     revset = resolve_revset(target_dir)
 
+    if already_reviewing(target_dir):
+        log_warn(f"tuicr is already reviewing {target_dir} in another window")
+        log_info("Switch to it with Ctrl-b + w (window list)")
+        watch_name = start_watch(target_dir, active_review_slug(target_dir), cli_session)
+        return 0
+
     log_info(f"Launching tuicr in a new tmux window ('{window_name}')")
     log_info(f"Directory: {target_dir}")
-    log_info(f"Review target: {revset}")
+    dirty = bool(git(target_dir, "status", "--porcelain").stdout.strip())
+    if dirty:
+        log_info("Review target: worktree")
+    else:
+        log_info(f"Review target: {revset}")
 
     # tmux signals this channel when the window's command finishes, which is
     # how the caller blocks on an interactive TUI it does not own.
@@ -139,10 +227,10 @@ def launch(target_dir: str) -> int:
     if tuicr_supports_stdout():
         handle, output_file = tempfile.mkstemp(prefix="tuicr-output.", dir=os.environ.get("TMPDIR", "/tmp"))
         os.close(handle)
-        inner = f"tuicr -r {_sh_quote(revset)} --stdout > {_sh_quote(output_file)}"
+        inner = f"tuicr {'-w' if dirty else '-r ' + _sh_quote(revset)} --stdout > {_sh_quote(output_file)}"
         log_info("Using --stdout mode (output will be captured)")
     else:
-        inner = f"tuicr -r {_sh_quote(revset)}"
+        inner = "tuicr -w" if dirty else f"tuicr -r {_sh_quote(revset)}"
         log_warn("tuicr --stdout not supported, output will be copied to clipboard")
 
     command = f"cd {_sh_quote(target_dir)} && {inner}; tmux wait-for -S {_sh_quote(wait_channel)}"
@@ -154,10 +242,15 @@ def launch(target_dir: str) -> int:
     pane_id = created.stdout.strip()
 
     run(["tmux", "select-window", "-t", pane_id])
+    watch_name = start_watch(target_dir, active_review_slug(target_dir), cli_session)
     log_info(f"tuicr is running in window '{window_name}' (pane {pane_id})")
     log_info("Waiting for tuicr to exit...")
-    run(["tmux", "wait-for", wait_channel], timeout=None)
-    log_info("tuicr finished")
+    try:
+        run(["tmux", "wait-for", wait_channel], timeout=None)
+        log_info("tuicr finished")
+    finally:
+        if watch_name:
+            stop_watch(watch_name)
 
     if output_file and Path(output_file).is_file():
         content = Path(output_file).read_text(encoding="utf-8", errors="replace")

@@ -37,13 +37,17 @@ and lists the available comment ids when `--to` names an unknown one.
 
 ### `tuicr_up.py [directory]`
 
-Launches tuicr in a new tmux window over a freshly-resolved revset, focuses it,
+Launches tuicr in a new tmux window over a freshly-resolved revset, starts the
+watch daemon for the current Copilot CLI session, focuses the review window,
 blocks until tuicr exits, then prints whatever tuicr exported.
 
 Configured by environment, not flags: `TUICR_WINDOW_NAME` (default `tuicr`),
 `TUICR_BASE_REF` (default: **the remote's own default branch**, never a
 hardcoded name), `TUICR_HEAD_REF` (default `HEAD`), `TUICR_REMOTE` (default
 `origin`).
+
+If tuicr is already reviewing that checkout, the launcher reuses the active
+review session and still starts the watcher instead of opening another window.
 
 Refuses (exit 1) when tuicr is missing, the target is not a git repo, or it is
 not running inside tmux. Exits 0 without acting if a tuicr pane is already open
@@ -85,9 +89,10 @@ watch_up.py --stop NAME | --stop-all [--prefix P] [--exclude S] | --list
 ```
 
 Emits `WATCH_PID`, `WATCH_PIDFILE`, `WATCH_LOG`, `WATCH_NAME`,
-`WATCH_PERSISTENT`. Starting is **idempotent**: a live PID in the pidfile is
-reused and reported. Exit 2 for a missing required option, 3 for a missing
-watcher/repo, 4 if the daemon died during startup.
+`WATCH_PERSISTENT`. Starting is **idempotent by replacement**: if the pidfile
+already names a live watcher, it is stopped and replaced with a fresh daemon
+for the same `(repo, session)`. Exit 2 for a missing required option, 3 for a
+missing watcher/repo, 4 if the daemon died during startup.
 
 `--name` lets a caller running several watchers retire exactly the one it means.
 `--persistent` only *tags* the watcher so a bulk `--stop-all` can skip it.
@@ -113,7 +118,8 @@ counts as delivered only once it appears in the session's `events.jsonl` as a
 **Pane binding is re-checked before every injection.** If the agent exited and a
 shell reclaimed the pane, pasting a prompt and pressing Enter would execute it
 as a shell command. This is a safety check, not an optimisation, and an
-ambiguous match is always an error — never a guess.
+ambiguous match is always an error — never a guess. The daemon still wakes a
+live CLI even if the input box already contains text.
 
 **A tuicr failure is never "no comments".** Conflating them would leave the
 daemon reporting healthy while silently ignoring the human forever.

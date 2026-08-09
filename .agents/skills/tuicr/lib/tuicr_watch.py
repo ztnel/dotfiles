@@ -212,9 +212,8 @@ class WakeDeliverer:
         pane capture. Returns one of :data:`BOX_HAS_WAKE`, :data:`BOX_EMPTY`,
         :data:`BOX_OTHER_TEXT` or :data:`BOX_UNRECOGNIZED`.
 
-        Overwriting text a human is mid-way through typing would be
-        destructive, so anything unexpected leaves the comments pending rather
-        than pasting blind.
+        The state is advisory only: wake delivery still proceeds even when the
+        box already holds text or the capture shape is unfamiliar.
         """
         captured = tmuxio.capture(self.pane)
         if captured is None:
@@ -319,14 +318,8 @@ class WakeDeliverer:
         self._event_offset = paths.file_size(self.session.events_file)
 
         state = self.box_state(wake_token)
-        if state == BOX_EMPTY:
+        if state != BOX_HAS_WAKE:
             tmuxio.paste(self.pane, prompt, f"tuicr-watch-{wake_token[len('tuicr-'):]}")
-        elif state == BOX_OTHER_TEXT:
-            warn("input box holds other text; leaving comments pending rather than overwriting it.")
-            return False
-        elif state == BOX_UNRECOGNIZED:
-            warn("input box not recognizable; leaving comments pending rather than pasting blind.")
-            return False
 
         mode = "csi"
         for attempt in range(1, self.config.submit_tries + 1):

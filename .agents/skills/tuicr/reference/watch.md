@@ -29,6 +29,8 @@ in [`../SKILL.md`](../SKILL.md), not this document.
   focus-in sequence to the target pane *without switching the human's window*,
   submits raw CSI-u Enter (`ESC [ 13 u`), then restores focus-out. If the token
   is still in the input box after an attempt, it falls back to a named `Enter`.
+  The daemon still wakes a live session even when the input box already holds
+  text.
 - **The oracle is the persisted event, never the screen.** Success means the
   wake's deterministic token appears in a `user.message` event in the target
   session's `events.jsonl`. `capture-pane` is diagnostic only. Scanning starts
@@ -79,6 +81,8 @@ That is the whole prompt, by design:
 
 `watch_up.py` is the supported entry point — it detaches the daemon, tracks a
 pidfile, and is idempotent per `--name`.
+If the pidfile already names a live watcher for that `(repo, session)`, it is
+stopped and replaced with a fresh daemon for the new Copilot session.
 
 ```bash
 ~/.agents/skills/tuicr/lib/watch_up.py \
@@ -160,7 +164,7 @@ honours `XDG_STATE_HOME`, and the CLI session root honours
 | `could not read comments … consecutive failures` | The session was deleted or `tuicr` is failing; the daemon is deliberately *not* treating this as "no comments" |
 | Wake stays in the input box | The CLI ignored both CSI-u and named Enter — check the pane/session pairing and the log |
 | Wake left the box but no event | The agent is mid-turn; the daemon waits `--queue-timeout` without resubmitting. Raise it for long turns |
-| Input box holds other text | The daemon refuses to overwrite human input and retries later |
+| Input box holds other text | The daemon still wakes the session; check the pane/session pairing and log if nothing appeared |
 | A comment was woken twice | Expected after `--rearm` if no reply was ever posted. The Wake contract requires idempotent handling |
 | Backlog delivered on attach | Expected: comments written before the daemon started are real outstanding work. Pass `--seed-existing` to adopt a session's backlog as already-handled |
 | Count higher than the comments you just wrote | Expected: the count is *total* unanswered, including earlier comments still awaiting a reply |
