@@ -172,8 +172,8 @@ Concrete failure modes observed in this repository, not general advice.
 
 - **Nothing is logged.** `~/.copilot/logs/` contains no record of a skipped skill. Absence
   of an error is not evidence a skill loaded.
-- **A skill can be missing for months.** `jira` — a dependency of `/dev` Phase 1 and of
-  `secretary` — sat at 1145 characters and silently never loaded.
+- **A skill can be missing for months.** `jira` — a dependency of a feature-workflow
+  skill and of `secretary` — sat at 1145 characters and silently never loaded.
 - **`name` must equal the directory name.** Renaming a folder without editing the
   frontmatter, or vice versa, silently unloads the skill.
 - **A UTF-8 BOM hides the opening `---`.** Frontmatter detection fails and the entire

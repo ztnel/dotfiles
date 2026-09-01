@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Report month-to-date AI credit spend against the monthly cap.
 
-The whole point of dev is fitting a feature workflow inside a small
-monthly credit allowance, so the allowance has to be observable. The CLI
+Fitting a feature workflow inside a small monthly credit allowance
+requires the allowance to be observable. The CLI
 records per-request usage in its own session store; this reads that store and
 compares the month's total against the cap.
 

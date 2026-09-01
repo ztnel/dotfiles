@@ -50,48 +50,12 @@ When editing existing code:
  - When your changes create orphans remove imports/variables/functions that **YOUR** changes made unused.
  - The test: Every changed line should trace directly to the user's request.
 
-### 4. Goal-Driven Execution: Define success criteria. Loop until verified.
-
-Transform tasks into verifiable goals:
-
- - For weak criteria (i.e. "make it work") require constant clarification.
- - "Add validation" → "Write tests for invalid inputs, then make them pass"
- - "Fix the bug" → "Write a test that reproduces it, then make it pass"
- - "Refactor X" → "Ensure tests pass before and after"
- - For multi-step tasks, state a brief plan:
-    1. [Step] → verify: [check]
-    2. [Step] → verify: [check]
-    3. [Step] → verify: [check]
-
-Strong success criteria let you loop independently. These guidelines are working if fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
-
-### 5. Always Provide and Maintain In-Source Documentation.
+### 4. Always Provide and Maintain In-Source Documentation.
 
 Each folder containing source code (excluding tests) should have an accompanying `README.md` with the following information:
 
  - Description of public API contracts (how to use)
  - Relevant design criteria and implementation
-
----
-
-## Session Workflow (multi-phase changes)
-
-For changes that span multiple files or commits, plan in the **session folder**, not in tracked repo files. Your runtime provides a workspace that persists across checkpoints but is never committed. Use it for:
-
- - Phased plans, todo lists, scratch notes.
- - Intermediate analyses, architecture diagrams, decision logs.
- - Anything an agent would otherwise be tempted to drop into the repo as `NOTES.md`, `TASKS.md`, or similar.
-
-Do **not** create planning markdown files inside the repository tree unless their contents need to be reviewed by the human. Reserve the repo for content that has long-term value to humans (`docs/`, `README.md`, `AGENTS.md`).
-
----
-
-## Root Review Workflow
-
-When operating as the main/root agent, not a delegated sub-agent:
-
- - If `TMUX` is set, the current working directory is inside a git repository with unstaged changes, open `tuicr` in a new tmux window in the same session as the active agent before continuing with the task, using the tmux wrapper from the `tuicr` skill under `~/.agents/skills/tuicr`.
- - This automatic `tuicr` launch requirement applies only to the main/root agent. Delegated sub-agents should not auto-launch `tuicr` unless the human explicitly asks for it.
 
 ---
 

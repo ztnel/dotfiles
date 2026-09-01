@@ -35,7 +35,8 @@ each script's contract and exit codes.
 4. **The watch loop is local-only.** A woken agent may read comments, make
    **unstaged** edits, and post **local draft** replies. It must never stage,
    commit, push, or sync to a remote forge. The human's review gate depends on
-   this.
+   this. Committing happens **outside** the loop, after the human has approved
+   and the review is over — never in response to a wake.
 
 ## Pick the workflow
 

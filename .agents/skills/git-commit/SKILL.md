@@ -32,8 +32,8 @@ Reviewed-by: <name> <email>, Copilot (<reviewer-1>) <...>, Copilot (<reviewer-2>
   Copilot identity, with the **author model ID embedded in the name**. These are
   the models that *generated* part of the staged code, not necessarily the one
   running this skill. **One entry per distinct author model** (mirroring the
-  `Reviewed-by` format) — a single commit may mix authors (e.g. a `/dev` generator
-  wrote the implementation and the adversary wrote the tests).
+  `Reviewed-by` format) — a single commit may mix authors (e.g. the orchestrator's
+  generator wrote the implementation and the adversary wrote the tests).
 - **Approved-by** — the local human's git identity (`user.name` / `user.email`).
 - **Reviewed-by** — a **single comma-separated line** with the **human approver
   first** (proving they explicitly reviewed *and* approved), followed by zero or
@@ -44,7 +44,7 @@ Reviewed-by: <name> <email>, Copilot (<reviewer-1>) <...>, Copilot (<reviewer-2>
 
 - **Author model(s)** — the model(s) that wrote the staged code. Pass one
   `--author-model` per distinct author (**repeatable**): if you generated it, your
-  own model ID; if `/dev` agents wrote it, *their* model IDs (e.g. the generator
+  own model ID; if sub-agents wrote it, *their* model IDs (e.g. the generator
   for impl files + the adversary for test files). The orchestrator resolves these
   from its per-file provenance ledger for the staged set. Defaults to
   `$COPILOT_MODEL` when none is given.

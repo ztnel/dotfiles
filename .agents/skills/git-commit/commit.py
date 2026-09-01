@@ -139,7 +139,7 @@ def build_message(description: str, authors: list[str], approver: str, reviewers
         CommitError: If no non-empty author model was supplied.
     """
     # dict.fromkeys dedupes while preserving first-seen order; a commit may
-    # legitimately mix authors (the /dev generator wrote impl, the adversary
+    # legitimately mix authors (the generator wrote impl, the adversary
     # wrote tests), so every distinct model gets an entry on one line.
     distinct_authors = list(dict.fromkeys(model for model in authors if model))
     if not distinct_authors:
