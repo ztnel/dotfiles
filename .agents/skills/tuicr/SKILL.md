@@ -137,6 +137,13 @@ prompt arrives, the daemon has confirmed that comments are awaiting a response.
 The prompt is intentionally minimal — **this section is the behaviour**, so it
 is identical no matter which agent is woken.
 
+Before replying to anything, refresh your understanding of the file at the
+current checkout state. Re-read the latest file contents for the anchored path
+before deciding how to answer, so your reasoning reflects the newest version of
+the code even if the comment was written against an older snapshot. Never
+derive reply anchors from the current file text; use the comment id to copy the
+original anchor verbatim.
+
 `N` is the **total** outstanding count, not just what changed since the last
 wake, so it may exceed the number the human wrote most recently — earlier
 comments still awaiting a reply are included. Answer all of them.
@@ -307,6 +314,8 @@ Getting the anchor wrong fails **twice over**, and neither failure is obvious:
 If the original's file or line no longer exists, still anchor at the original
 `path`/`start_line`/`end_line` from the comments JSON — the session pins those
 to the reviewed diff, and the human needs the answer next to their question.
+Use the newest file contents only to understand the current code, not to
+reconstruct the anchor yourself.
 
 Reserve review-level replies (no `--target-file`) for genuinely review-wide
 summaries. `--side old` is for removed lines, `--side new` for added or
