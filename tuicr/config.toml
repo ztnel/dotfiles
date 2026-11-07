@@ -3,7 +3,6 @@ show_file_list = true
 diff_view = "side-by-side"
 wrap = true
 cursor_line = true
-comment_vim = true
 
 comment_types = [
   { id = "question", definition = "ask for clarification", color = "yellow" },
