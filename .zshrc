@@ -6,6 +6,7 @@ export PYENV_BASE_PATH=/Users/"$USER"/.pyenv
 
 autoload -Uz compinit && compinit
 setopt nonomatch
+bindkey -M viins '^R' history-incremental-search-backward
 
 # custom aliases
 alias h=history
@@ -26,4 +27,3 @@ function create-env() {
 
 # prompt
 PS1='%F{red}%n%f%F{green} '$'\Uf8ff'' %*%F%F{yellow} %3~ %F{15}%% '
-
